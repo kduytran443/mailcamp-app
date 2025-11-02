@@ -1,9 +1,10 @@
-import { Controller, HttpCode, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { LocalAuthGuard } from './guards/local.guard';
 import { AuthService } from './auth.service';
 import { CurrentUser } from './current-user.decorator';
 import type { Response } from 'express';
 import type { TokenPayload } from './token.payload';
+import { RegisterDto } from './dto/register.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -16,7 +17,7 @@ export class AuthController {
     @CurrentUser() user: TokenPayload,
     @Res({ passthrough: true }) res: Response
   ) {
-    return this.authService.login(user, res);
+    return this.authService.assignTokens(user, res);
   }
 
   @Post('refresh-token')
@@ -32,5 +33,28 @@ export class AuthController {
     res.clearCookie('access_token', { httpOnly: true, path: '/' });
     res.clearCookie('refresh_token', { httpOnly: true, path: '/' });
     return { message: 'Logged out successfully' };
+  }
+
+  @Post('sign-up')
+  async signup(@Body() dto: RegisterDto) {
+    // Create user and send verification email
+    await this.authService.signup(dto);
+    return { message: 'Verification email sent successfully' };
+  }
+
+  // GET /auth/verify-email?token=
+  @Get('verify-email')
+  async verifyEmail(@Query('token') token: string) {
+    // Verify user by token and activate account
+    await this.authService.verifyEmail(token);
+    return { message: 'Email verified successfully. You can now log in.' };
+  }
+
+  @Post('resend-verification')
+  @HttpCode(200)
+  async resendVerificationEmail(@Body('email') email: string) {
+    // Resend email verification with a new token
+    await this.authService.retrySendVerificationEmail(email);
+    return { message: 'Verification email sent successfully' };
   }
 }

@@ -6,10 +6,12 @@ import { LocalStrategy } from './strategies/local.strategy';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { PrismaModule } from 'src/prisma/prisma.module';
 
 @Module({
   imports: [
     UsersModule,
+    PrismaModule,
     JwtModule.registerAsync({
       imports: [ConfigModule], 
       inject: [ConfigService],
