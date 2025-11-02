@@ -1,4 +1,4 @@
-import { Controller, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Controller, HttpCode, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { LocalAuthGuard } from './guards/local.guard';
 import { AuthService } from './auth.service';
 import { CurrentUser } from './current-user.decorator';
@@ -24,5 +24,13 @@ export class AuthController {
     const refreshToken = req.cookies?.refresh_token;
     console.log("refreshToken", refreshToken)
     return this.authService.refreshTokens(refreshToken, res);
+  }
+
+  @Post('logout')
+  @HttpCode(200)
+  logout(@Res({ passthrough: true }) res: Response) {
+    res.clearCookie('access_token', { httpOnly: true, path: '/' });
+    res.clearCookie('refresh_token', { httpOnly: true, path: '/' });
+    return { message: 'Logged out successfully' };
   }
 }
