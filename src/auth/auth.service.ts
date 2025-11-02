@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import { User } from '@prisma/client';
@@ -6,6 +6,7 @@ import ms from 'ms';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Response } from 'express';
+import { TokenPayload } from './token.payload';
 
 @Injectable()
 export class AuthService {
@@ -15,8 +16,8 @@ export class AuthService {
     private readonly configService: ConfigService,
   ) {}
 
-  async login(user: any, res: Response) {
-    const payload = { sub: user.id };
+  async login(user: TokenPayload, res: Response, msg?: string) {
+    const payload = { email: user.email, id: user.id, name: user.name, createdAt: user.createdAt, updatedAt: user.updatedAt };
 
     const accessExpStr = this.configService.getOrThrow('JWT_EXPIRES');
     const refreshExpStr = this.configService.getOrThrow('REFRESH_JWT_EXPIRES');
@@ -53,10 +54,25 @@ export class AuthService {
     });
 
     return {
-      message: 'Login successful',
+      message: msg ?? 'Login successful',
       accessToken,
       refreshToken,
     };
+  }
+
+  async refreshTokens(refreshToken: string, res: Response) {
+    try {
+      const payload = await this.jwtService.verifyAsync(refreshToken, {
+        secret: this.configService.getOrThrow('JWT_SECRET'),
+      });
+
+      const user = await this.usersService.getUserByEmail(payload.email);
+      if (!user) throw new ForbiddenException('User not found');
+
+      return this.login({...user}, res);
+    } catch (e) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
   }
 
   /**
