@@ -18,14 +18,142 @@ model User {
   updatedAt        DateTime    @updatedAt
   emailToken       String?
   emailTokenExpires DateTime?
+  workspaceMembers WorkspaceMember[]
 }
 
 enum UserStatus {
   PENDING
   ACTIVATED
+  SUSPENDED
 }
 
 enum Role {
   USER
   ADMIN
+}
+
+model Workspace {
+  id           String        @id @default(cuid())
+  name         String
+  image        String?
+  description  String?
+  subscribers  Subscriber[]
+  campaigns    Campaign[]
+  members      WorkspaceMember[]
+  mailAccounts MailAccount[]
+  tags Tag[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model WorkspaceMember {
+  id          String     @id @default(uuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceRole @default(MEMBER)
+  joinedAt    DateTime   @default(now())
+
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id])
+  user        User       @relation(fields: [userId], references: [id])
+
+  @@unique([workspaceId, userId])
+}
+
+enum WorkspaceRole {
+  OWNER
+  MEMBER
+}
+
+model MailAccount {
+  id          String    @id @default(uuid())
+  workspaceId String
+  label       String
+
+  // SMTP configs
+  smtpUser    String?
+  smtpPass    String?
+
+  provider         MailProvider  @default(SMTP)
+  createdAt    DateTime   @default(now())
+
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id])
+}
+
+enum MailProvider {
+  SMTP
+  GMAIL
+  OUTLOOK
+  SENDGRID
+  RESEND
+}
+
+model Subscriber {
+  id           String       @id @default(cuid())
+  email        String
+  name         String?
+  workspaceId  String
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id])
+
+  tags         Tag[]        @relation("SubscriberTags")
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  campaignAudiences CampaignAudience[]
+  @@unique([workspaceId, email])
+}
+
+model Tag {
+  id          String        @id @default(cuid())
+  name        String
+  workspaceId String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id])
+
+  subscribers Subscriber[] @relation("SubscriberTags")
+
+  @@unique([workspaceId, name])
+}
+
+model Campaign {
+  id           String        @id @default(cuid())
+  name         String
+  subject      String?
+  content      String?
+
+  workspaceId  String
+  workspace    Workspace @relation(fields: [workspaceId], references: [id])
+
+  audience     CampaignAudience[]
+  status       CampaignStatus @default(DRAFT)
+  schedule     DateTime?
+  type         CampaignType  @default(NEWSLETTER)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model CampaignAudience {
+  id            String     @id @default(cuid())
+  campaignId    String
+  subscriberId  String
+
+  campaign      Campaign   @relation(fields: [campaignId], references: [id])
+  subscriber    Subscriber @relation(fields: [subscriberId], references: [id])
+
+  @@unique([campaignId, subscriberId])
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  FAILED
+}
+
+enum CampaignType {
+  NEWSLETTER
+  AUTOMATION
+  TRANSACTIONAL
 }

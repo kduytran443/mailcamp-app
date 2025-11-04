@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { LoggerModule } from 'nestjs-pino';
 import type { Options as PinoHttpOptions } from 'pino-http';
 import { AuthModule } from './auth/auth.module';
+import { WorkspacesModule } from './workspaces/workspaces.module';
 
 const LOG_LEVELS: Record<string, string> = {
   prod: 'info',
@@ -32,7 +33,8 @@ const LOG_TRANSPORTS: Record<string, PinoHttpOptions['transport']> = {
     }),
     ConfigModule.forRoot({ isGlobal: true }),
     UsersModule,
-    AuthModule
+    AuthModule,
+    WorkspacesModule
   ],
   controllers: [],
   providers: [],
