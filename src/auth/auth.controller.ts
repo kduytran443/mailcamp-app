@@ -6,7 +6,10 @@ import type { Response } from 'express';
 import type { TokenPayload } from './token.payload';
 import { RegisterDto } from './dto/register.dto';
 
-@Controller('auth')
+@Controller({
+  path: 'auth',
+  version: '1',
+})
 export class AuthController {
 
   constructor(private readonly authService: AuthService) {}

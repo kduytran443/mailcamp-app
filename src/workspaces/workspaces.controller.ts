@@ -18,7 +18,10 @@ import { WorkspaceMemberGuard } from "src/auth/guards/workspace-member.guard";
 import { WorkspaceOwnerGuard } from "src/auth/guards/workspace-owner.guard";
 import { WorkspacesService } from "./workspaces.service";
 
-@Controller("workspaces")
+@Controller({
+  path: 'workspaces',
+  version: '1',
+})
 @UseGuards(JwtAuthGuard)
 export class WorkspacesController {
   constructor(private readonly workspaceService: WorkspacesService) {}
