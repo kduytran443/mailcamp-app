@@ -29,6 +29,10 @@ export class PgbossService implements OnModuleInit, OnModuleDestroy {
     this.boss.stop();
     this.logger.info('pg-boss stopped');
   }
+  
+  async publish(name: string, data: any, options?: any) {
+    return this.boss.publish(name, data, options);
+  }
 
   getInstance(): PgBoss {
     return this.boss;

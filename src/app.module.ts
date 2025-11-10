@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 import { SubscribersModule } from './subscribers/subscribers.module';
 import { PgbossModule } from './pgboss/pgboss.module';
+import { CampaignsModule } from './campaigns/campaigns.module';
 
 const LOG_LEVELS: Record<string, string> = {
   prod: 'info',
@@ -38,7 +39,8 @@ const LOG_TRANSPORTS: Record<string, PinoHttpOptions['transport']> = {
     AuthModule,
     WorkspacesModule,
     SubscribersModule,
-    PgbossModule
+    PgbossModule,
+    CampaignsModule
   ],
   controllers: [],
   providers: [],

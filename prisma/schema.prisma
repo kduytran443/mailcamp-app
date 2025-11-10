@@ -117,7 +117,6 @@ model Tag {
 
   @@unique([workspaceId, name])
 }
-
 model Campaign {
   id           String        @id @default(cuid())
   name         String
@@ -135,21 +134,13 @@ model Campaign {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  scheduleType   ScheduleType?   // ONE_TIME, RECURRING
-  recurrenceType RecurrenceType? // DAILY, WEEKLY, MONTHLY, YEARLY
-  hour           Int?            // local hour (0-23)
-  minute         Int?            // local minute (0-59)
-  byDay String[] @default([])    // e.g. ["MO", "WE"] for weekly
-  byMonthDay     Int?            // e.g. 1 for monthly/yearly
-}
-
-model EmailSendLog {
-  id           String   @id @default(cuid())
-  campaignId   String
-  subscriberId String
-  sentAt       DateTime
-
-  @@unique([campaignId, subscriberId]) // idempotent
+  // Scheduling fields
+  scheduleType   ScheduleType?       // ONE_TIME, RECURRING
+  recurrenceType RecurrenceType?     // DAILY, WEEKLY, MONTHLY, YEARLY
+  hour           Int?                // 0–23
+  minute         Int?                // 0–59
+  byDay          String[] @default([])   // e.g ["MO", "WE"] for weekly
+  byMonthDay     Int[] @default([])      // day of month 1–31
 }
 
 enum ScheduleType {
@@ -162,6 +153,15 @@ enum RecurrenceType {
   WEEKLY
   MONTHLY
   YEARLY
+}
+
+model EmailSendLog {
+  id           String   @id @default(cuid())
+  campaignId   String
+  subscriberId String
+  sentAt       DateTime
+
+  @@unique([campaignId, subscriberId]) // idempotent
 }
 
 model CampaignAudience {
