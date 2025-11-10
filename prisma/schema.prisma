@@ -11,13 +11,15 @@ model User {
   id               String      @id @default(uuid())
   name             String      @db.VarChar(100)
   email            String      @unique @db.VarChar(256)
+  birthDate        DateTime    @db.Date @default("2000-01-01T00:00:00.000Z")
   password         String
+  timezone         String      @db.VarChar(100) @default("Asia/Ho_Chi_Minh")
   status           UserStatus  @default(PENDING)
   role             Role        @default(USER)
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
   emailToken       String?
-  emailTokenExpires DateTime?
+  emailTokenExpires DateTime?  @db.Timestamptz
   workspaceMembers WorkspaceMember[]
 }
 
@@ -94,6 +96,7 @@ model Subscriber {
   name         String?
   workspaceId  String
   workspace    Workspace    @relation(fields: [workspaceId], references: [id])
+  timezone     String?      @default("Asia/Ho_Chi_Minh")
 
   tags         Tag[]        @relation("SubscriberTags")
 
@@ -131,6 +134,34 @@ model Campaign {
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  scheduleType   ScheduleType?   // ONE_TIME, RECURRING
+  recurrenceType RecurrenceType? // DAILY, WEEKLY, MONTHLY, YEARLY
+  hour           Int?            // local hour (0-23)
+  minute         Int?            // local minute (0-59)
+  byDay String[] @default([])    // e.g. ["MO", "WE"] for weekly
+  byMonthDay     Int?            // e.g. 1 for monthly/yearly
+}
+
+model EmailSendLog {
+  id           String   @id @default(cuid())
+  campaignId   String
+  subscriberId String
+  sentAt       DateTime
+
+  @@unique([campaignId, subscriberId]) // idempotent
+}
+
+enum ScheduleType {
+  ONE_TIME
+  RECURRING
+}
+
+enum RecurrenceType {
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
 }
 
 model CampaignAudience {

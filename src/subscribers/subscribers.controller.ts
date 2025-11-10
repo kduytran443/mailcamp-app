@@ -17,7 +17,10 @@ import { CreateSubscriberDto } from './dto/create-subscriber.dto';
 import { UpdateSubscriberDto } from './dto/update-subscriber.dto';
 import { FilterSubscribersDto } from './dto/filter-subscribers.dto';
 
-@Controller('/workspaces/:workspaceId/subscribers')
+@Controller({
+  path: '/workspaces/:workspaceId/subscribers',
+  version: '1'
+})
 export class SubscribersController {
   constructor(private readonly service: SubscribersService) {}
 

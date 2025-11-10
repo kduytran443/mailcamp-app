@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN     "timezone" VARCHAR(100) NOT NULL DEFAULT 'Asia/Ho_Chi_Minh',
+ALTER COLUMN "emailTokenExpires" SET DATA TYPE TIMESTAMPTZ;

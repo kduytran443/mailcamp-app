@@ -1,7 +1,7 @@
-import { IsEmail, IsNotEmpty, IsStrongPassword } from 'class-validator';
+import { IsDateString, IsEmail, IsNotEmpty, IsStrongPassword } from 'class-validator';
 
 export class CreateUserRequestDTO {
- @IsNotEmpty()
+  @IsNotEmpty()
   name: string;
 
   @IsEmail()
@@ -9,4 +9,10 @@ export class CreateUserRequestDTO {
 
   @IsStrongPassword()
   password: string;
+
+  @IsNotEmpty()
+  timezone: string;
+  
+  @IsDateString()
+  birthDate?: string;
 }

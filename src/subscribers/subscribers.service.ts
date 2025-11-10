@@ -1,10 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateSubscriberDto } from './dto/create-subscriber.dto';
-import * as csv from 'csv-parser';
+import csv from 'csv-parser';
 import { Readable } from 'stream';
 import { FilterSubscribersDto } from './dto/filter-subscribers.dto';
 import { UpdateSubscriberDto } from './dto/update-subscriber.dto';
+import { SaveSubscriberDto } from './dto/save-subscriber.dto';
 
 @Injectable()
 export class SubscribersService {
@@ -39,6 +40,40 @@ export class SubscribersService {
     return subscriber;
   }
 
+  async upsert(workspaceId: string, dto: SaveSubscriberDto) {
+    const tags = dto.tags ?? [];
+
+    return this.prisma.subscriber.upsert({
+      where: {
+        workspaceId_email: {
+          workspaceId,
+          email: dto.email
+        }
+      },
+      update: {
+        name: dto.name,
+        tags: {
+          set: [],
+          connectOrCreate: tags.map(tag => ({
+            where: { workspaceId_name: { workspaceId, name: tag } },
+            create: { workspaceId, name: tag }
+          }))
+        }
+      },
+      create: {
+        email: dto.email,
+        name: dto.name,
+        workspaceId,
+        tags: {
+          connectOrCreate: tags.map(tag => ({
+            where: { workspaceId_name: { workspaceId, name: tag } },
+            create: { workspaceId, name: tag }
+          }))
+        }
+      },
+      include: { tags: true }
+    });
+  }
 
   // ------------------------------
   // LIST + PAGING
@@ -150,7 +185,11 @@ export class SubscribersService {
 
     let success = 0;
     let failed = 0;
-    const errors = [];
+    const errors: {
+      line: number;
+      error: string;
+      row?: any;
+    }[] = [];
 
     for (let i = 0; i < results.length; i++) {
       const row = results[i];
@@ -164,13 +203,13 @@ export class SubscribersService {
 
       const name = row.name?.trim() || null;
 
-      // tags: "vip,tier1" => ["vip","tier1"]
+      // tags: "vip;tier1" => ["vip","tier1"]
       const tags = row.tags
-        ? row.tags.split(',').map((t) => t.trim())
+        ? row.tags.split(';').map((t) => t.trim())
         : [];
 
       try {
-        await this.create(workspaceId, { email, name, tags });
+        await this.upsert(workspaceId, { email, name, tags });
         success++;
       } catch (e) {
         failed++;

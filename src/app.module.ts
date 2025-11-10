@@ -6,6 +6,7 @@ import type { Options as PinoHttpOptions } from 'pino-http';
 import { AuthModule } from './auth/auth.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 import { SubscribersModule } from './subscribers/subscribers.module';
+import { PgbossModule } from './pgboss/pgboss.module';
 
 const LOG_LEVELS: Record<string, string> = {
   prod: 'info',
@@ -13,8 +14,8 @@ const LOG_LEVELS: Record<string, string> = {
 };
 
 const LOG_TRANSPORTS: Record<string, PinoHttpOptions['transport']> = {
-  production: undefined, // raw logs
-  development: { target: 'pino-pretty', options: { singleLine: true } },
+  prod: undefined, // raw logs
+  dev: { target: 'pino-pretty', options: { singleLine: true } },
 }
 
 @Module({
@@ -36,7 +37,8 @@ const LOG_TRANSPORTS: Record<string, PinoHttpOptions['transport']> = {
     UsersModule,
     AuthModule,
     WorkspacesModule,
-    SubscribersModule
+    SubscribersModule,
+    PgbossModule
   ],
   controllers: [],
   providers: [],

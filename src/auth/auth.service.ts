@@ -11,6 +11,9 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { sendVerificationEmail } from 'src/utils/email.utils';
 import { addMinutes, isAfter } from 'date-fns';
+import { Role, UserStatus } from '@prisma/client';
+import dayjs from 'src/app/dayjs.config';
+import { PgbossService } from 'src/pgboss/pgboss.service';
 
 @Injectable()
 export class AuthService {
@@ -19,6 +22,7 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly pgbossService: PgbossService,
   ) {}
 
   async assignTokens(user: TokenPayload, res: Response, msg?: string) {
@@ -89,7 +93,7 @@ export class AuthService {
 
     // Generate email verification token
     const emailToken = randomBytes(32).toString('hex');
-    const emailTokenExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes from now
+    const emailTokenExpires = dayjs().utc().add(5, 'minute').toDate();
 
     // Create user
     const user = await this.prismaService.user.create({
@@ -97,10 +101,12 @@ export class AuthService {
         name: dto.name,
         email: dto.email,
         password: hashedPassword,
-        status: 'PENDING',
+        timezone: dto.timezone ?? 'Asia/Ho_Chi_Minh',
+        status: UserStatus.PENDING,
+        birthDate: dayjs(dto.birthDate).toDate(),
         emailToken,
         emailTokenExpires,
-        role: 'USER',
+        role: Role.USER,
       },
     });
 
@@ -115,7 +121,10 @@ export class AuthService {
     });
     if (!user) throw new BadRequestException('Invalid verification token');
 
-    if (!user.emailTokenExpires || isAfter(new Date(), user.emailTokenExpires)) {
+    const now = dayjs().utc();
+    const emailTokenExpires = dayjs(user.emailTokenExpires).utc();
+
+    if (!user.emailTokenExpires || now.isAfter(emailTokenExpires)) {
       throw new ForbiddenException('Verification token expired');
     }
 
@@ -123,11 +132,29 @@ export class AuthService {
     await this.prismaService.user.update({
       where: { id: user.id },
       data: {
-        status: 'ACTIVATED',
+        status: UserStatus.ACTIVATED,
         emailToken: null,
         emailTokenExpires: null,
       },
     });
+
+    // determine birth datetime at 9:00 on user's local time
+    const today = dayjs().tz(user.timezone);
+    const birthDateWithTz = dayjs(`${today.format('YYYY')}-${user.birthDate.getMonth() + 1}-${user.birthDate.getDate()} 09:00`).tz(user.timezone);
+
+    // convert user's local time to UTC
+    const sendAtUTC = birthDateWithTz.utc().toDate();
+    await this.pgbossService.getInstance().send(
+      'send-birthday-email',
+      { userId: user.id, fullName: user.name },
+      {
+        startAfter: sendAtUTC,
+        singletonKey: `birthday-${user.id}-${today.year()}`, // not duplicate
+        retryLimit: 5,
+        retryDelay: 30000, // 30s retry in failing case
+        retentionSeconds: 7 * 24 * 3600 // keep log in 7 days
+      }
+    );
   }
 
   async retrySendVerificationEmail(email: string) {
@@ -142,7 +169,7 @@ export class AuthService {
 
     // Generate a new email verification token
     const newToken = randomBytes(32).toString('hex');
-    const newTokenExpires = addMinutes(new Date(), 5); // 5 minutes expiry
+    const newTokenExpires = dayjs().utc().add(5, 'minute').toDate(); // 5 minutes expiry
 
     // Update user with new token
     await this.prismaService.user.update({
@@ -168,7 +195,6 @@ export class AuthService {
     // Compare plain password with hashed password
     const isMatch = await bcrypt.compare(password, user?.password);
     if (!isMatch) throw new UnauthorizedException('Invalid credentials');
-
     return user; // Passport attaches this to req.user
   }
 }

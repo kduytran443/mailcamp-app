@@ -1,4 +1,4 @@
-import { IsEmail, IsString, IsStrongPassword, MinLength } from 'class-validator';
+import { IsDateString, IsEmail, IsNotEmpty, IsString, IsStrongPassword, MinLength } from 'class-validator';
 
 export class RegisterDto {
   @IsString()
@@ -11,7 +11,9 @@ export class RegisterDto {
   @IsStrongPassword()
   password: string;
 
-  // optional: you can add role or other fields if needed
-  // @IsString()
-  // role?: 'USER' | 'ADMIN';
+  @IsNotEmpty()
+  timezone: string;
+  
+  @IsDateString()
+  birthDate: string;
 }
