@@ -1,13 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { PgbossService } from 'src/pgboss/pgboss.service';
-import { CreateCampaignDto } from './dto/create-campaign.dto';
 import dayjs from 'dayjs';
-import { TimezoneJob } from './dto/timezone-job.dto';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+import { CreateCampaignDto, SubscriberInput } from './dto/create-campaign.dto';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 @Injectable()
 export class CampaignsService {
-
   constructor(
     private prisma: PrismaService,
     private boss: PgbossService,
@@ -18,101 +21,87 @@ export class CampaignsService {
       name,
       content,
       subscribers,
-      scheduleType,       // "ONCE" | "DAILY" | "WEEKLY" | "MONTHLY"
-      sendAtLocal,        // local time input by user (ISO string)
-      byDay,              // e.g. ["MO","WE"] for weekly
-      byMonthDay,         // e.g. [1,15] for monthly
-      workspaceId
+      scheduleType,
+      recurrenceType,
+      sendAtLocal,
+      byDay = [],
+      byMonthDay = [],
+      workspaceId,
     } = dto;
 
-    // -------------------------------------------------------
-    // 1) Create campaign (only top-level info)
-    // -------------------------------------------------------
+    // 1) Create campaign record
     const campaign = await this.prisma.campaign.create({
       data: {
         name,
         content,
         scheduleType,
+        recurrenceType,
         byDay,
         byMonthDay,
-        workspaceId
+        workspaceId,
+        schedule: new Date(sendAtLocal),
       },
     });
 
-    // -------------------------------------------------------
     // 2) Group subscribers by timezone
-    // -------------------------------------------------------
-    const tzMap: Record<string, string[]> = {};
-
+    const tzMap: Record<string, SubscriberInput[]> = {};
     for (const s of subscribers) {
       if (!tzMap[s.timezone]) tzMap[s.timezone] = [];
-      tzMap[s.timezone].push(s.email);
+      tzMap[s.timezone].push(s);
     }
 
-    // -------------------------------------------------------
-    // 3) For each timezone → compute firstRunUTC + publish job
-    // -------------------------------------------------------
-    const timezoneJobs: TimezoneJob[] = [];
+    // 3) Schedule jobs per timezone
+    const queueName = 'campaign-send'; // 1 queue chung
+    for (const [tz, subs] of Object.entries(tzMap)) {
+      const emails = subs.map(s => s.email);
+      const payload = { campaignId: campaign.id, timezone: tz, emails };
 
-    for (const timezone of Object.keys(tzMap)) {
-      const emails = tzMap[timezone];
+      if (scheduleType === 'ONE_TIME') {
+        // const runAtUTC = dayjs.tz(sendAtLocal, tz).utc().toDate();
+        // await this.boss.getInstance().schedule(queueName, runAtUTC, payload, {
+        //   retryLimit: 5,
+        // });
+      } else if (scheduleType === 'RECURRING') {
+        // dtLocal = local datetime trong timezone của subscriber
+        const dtLocal = dayjs.tz(sendAtLocal, tz);
+        const minute = dtLocal.minute();
+        const hour = dtLocal.hour();
 
-      // Convert the local "sendAtLocal" to UTC by subscriber timezone
-      const firstRunUTC = this.convertLocalToUTC(sendAtLocal, timezone);
+        let cron = `${minute} ${hour} * * *`; // default daily
 
-      // Build idempotent job key
-      const jobKey = `campaign:${campaign.id}:tz:${timezone}:${firstRunUTC.toISOString()}`;
+        switch (recurrenceType) {
+          case 'DAILY':
+            cron = `${minute} ${hour} * * *`;
+            break;
+          case 'WEEKLY':
+            if (byDay.length > 0) {
+              const dowMap: Record<string, string> = { SU:'0', MO:'1', TU:'2', WE:'3', TH:'4', FR:'5', SA:'6' };
+              const days = byDay.map(d => dowMap[d]).join(',');
+              cron = `${minute} ${hour} * * ${days}`;
+            }
+            break;
+          case 'MONTHLY':
+            if (byMonthDay.length > 0) {
+              cron = `${minute} ${hour} ${byMonthDay.join(',')} * *`;
+            }
+            break;
+          case 'YEARLY':
+            const month = dtLocal.month() + 1;
+            const day = dtLocal.date();
+            cron = `${minute} ${hour} ${day} ${month} *`;
+            break;
+        }
 
-      // Prepare payload for worker
-      const payload = {
-        campaignId: campaign.id,
-        timezone,
-        emails, // worker will load these emails directly
-      };
+        const jobKey = `campaign:${campaign.id}:tz:${tz}`;
 
-      // Build pg-boss options
-      const jobOptions = {
-        jobKey,            // ensure idempotency
-        startAfter: firstRunUTC,
-        retryLimit: 5,
-        ...this.buildRecurring(scheduleType),
-      };
-
-      // Publish job to pg-boss
-      await this.boss.publish('campaign-send', payload, jobOptions);
-
-      timezoneJobs.push({ timezone, firstRunUTC, count: emails.length });
+        this.boss.getInstance().schedule(queueName, cron, payload, {
+          retryLimit: 5,
+          key: jobKey,
+          tz,
+        });
+      }
     }
 
-    return {
-      campaign,
-      timezoneJobs,
-    };
-  }
-
-  private buildRecurring(scheduleType: string) {
-    // Note:
-    // pg-boss does not support full cron rules.
-    // The worker itself will enforce weekly/monthly constraints.
-    if (scheduleType === 'DAILY') {
-      return { interval: '1 day' };
-    }
-
-    if (scheduleType === 'WEEKLY') {
-      // fire every day; worker checks if today is in byDay
-      return { interval: '1 day' };
-    }
-
-    if (scheduleType === 'MONTHLY') {
-      // fire every day; worker checks if today matches byMonthDay
-      return { interval: '1 day' };
-    }
-
-    // ONCE: do not set interval (one-time execution)
-    return {};
-  }
-
-  private convertLocalToUTC(localISO: string, tz: string): Date {
-    return dayjs.tz(localISO, tz).utc().toDate();
+    return campaign;
   }
 }

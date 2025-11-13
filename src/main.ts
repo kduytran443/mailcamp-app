@@ -13,7 +13,9 @@ async function bootstrap() {
   app.useLogger(app.get(Logger));
   app.use(cookieParser());
   app.useGlobalPipes(new ValidationPipe({
-    whitelist: true
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transform: true,
   }));
   app.setGlobalPrefix('api');
   app.enableVersioning({

@@ -3,3 +3,12 @@ export interface TimezoneJob {
   firstRunUTC: Date;
   count: number;
 }
+
+export interface TimezoneJobStatus {
+  timezone: string;
+  emailsTotal: number;
+  emailsSent: number;
+  jobKey: string;
+  jobState: string;
+  firstRunUTC: Date;
+}
