@@ -1,5 +1,5 @@
-import { IsOptional, IsString, IsInt } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsOptional, IsString, IsInt, IsArray } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
 
 export class FilterSubscribersDto {
   @IsOptional()
@@ -10,9 +10,21 @@ export class FilterSubscribersDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  limit?: number = 20;
+  pageSize?: number = 20;
 
   @IsOptional()
   @IsString()
-  tags?: string; // "vip,normal,..."
+  search?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @Transform(({ value }) => (Array.isArray(value) ? value : value ? [value] : []))
+  tags?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @Transform(({ value }) => (Array.isArray(value) ? value : value ? [value] : []))
+  timezones?: string[];
 }

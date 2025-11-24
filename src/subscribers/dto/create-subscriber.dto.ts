@@ -8,6 +8,9 @@ export class CreateSubscriberDto {
   @IsString()
   name?: string;
 
+  @IsString()
+  timezone?: string;
+
   @IsOptional()
   @IsArray()
   tags?: string[];

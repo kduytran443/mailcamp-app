@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateSubscriberDto } from './dto/create-subscriber.dto';
 import csv from 'csv-parser';
@@ -14,10 +14,21 @@ export class SubscribersService {
   async create(workspaceId: string, dto: CreateSubscriberDto) {
     const workspace = await this.prisma.workspace.findUnique({
       where: { id: workspaceId },
+      select: {
+        id: true
+      }
     });
 
-    if (!workspace) {
+    if (!workspace?.id) {
       throw new NotFoundException(`Workspace ${workspaceId} does not exist`);
+    }
+
+    const exists = await this.prisma.subscriber.findUnique({
+      where: { workspaceId_email: { workspaceId, email: dto.email } }
+    });
+
+    if (exists) {
+      throw new ConflictException(`Subscriber with email ${dto.email} already exists in this workspace`);
     }
 
     const tags = dto.tags ?? [];
@@ -28,6 +39,7 @@ export class SubscribersService {
         email: dto.email,
         name: dto.name,
         workspaceId,
+        timezone: dto.timezone,
         tags: {
           connectOrCreate: tags.map(tag => ({
             where: { workspaceId_name: { workspaceId, name: tag } },
@@ -79,18 +91,36 @@ export class SubscribersService {
   // LIST + PAGING
   // ------------------------------
   async findAll(workspaceId: string, filter: FilterSubscribersDto) {
-    const { page = 1, limit = 20, tags } = filter;
+    const {
+      page = 1,
+      pageSize = 20,
+      search,
+      tags,
+      timezones,
+    } = filter;
 
     const where: any = { workspaceId };
 
-    if (tags) {
-      const tagList = tags.split(',').map(t => t.trim());
-
+    // Filter tags (multiple)
+    if (tags && tags.length > 0) {
       where.tags = {
         some: {
-          name: { in: tagList }
-        }
+          name: { in: tags },
+        },
       };
+    }
+
+    // Filter timezone (multiple)
+    if (timezones && timezones.length > 0) {
+      where.timezone = { in: timezones };
+    }
+
+    // Filter search by email or name
+    if (search) {
+      where.OR = [
+        { email: { contains: search, mode: 'insensitive' } },
+        { name: { contains: search, mode: 'insensitive' } },
+      ];
     }
 
     const [total, data] = await Promise.all([
@@ -98,20 +128,20 @@ export class SubscribersService {
       this.prisma.subscriber.findMany({
         where,
         include: { tags: true },
-        skip: (page - 1) * limit,
-        take: limit,
-        orderBy: { createdAt: 'desc' }
-      })
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        orderBy: { createdAt: 'desc' },
+      }),
     ]);
 
     return {
       data,
       meta: {
         page,
-        limit,
+        pageSize,
         total,
-        totalPages: Math.ceil(total / limit)
-      }
+        totalPages: Math.ceil(total / pageSize),
+      },
     };
   }
 
@@ -135,13 +165,17 @@ export class SubscribersService {
   async update(workspaceId: string, id: string, dto: UpdateSubscriberDto) {
     const subscriber = await this.findOne(workspaceId, id);
 
-    const tags = dto.tags ?? [];
+    const email = dto.email ?? subscriber.email;
+    const name = dto.name ?? subscriber.name;
+    const timezone = dto.timezone ?? subscriber.timezone;
+    const tags = dto.tags ?? subscriber.tags.map(t => t.name);
 
     return this.prisma.subscriber.update({
       where: { id },
       data: {
-        email: dto.email,
-        name: dto.name,
+        email,
+        name,
+        timezone,
         tags: {
           set: [],
           connectOrCreate: tags.map(tag => ({

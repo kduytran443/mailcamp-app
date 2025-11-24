@@ -5,6 +5,8 @@ import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import { CreateCampaignDto, SubscriberInput } from './dto/create-campaign.dto';
+import { CampaignDetailDto, CampaignDto } from './dto/campaign.dto';
+import { Campaign } from '@prisma/client';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -16,11 +18,97 @@ export class CampaignsService {
     private boss: PgbossService,
   ) {}
 
+  async findAll(
+  workspaceId: string,
+  page = 1,
+  pageSize = 20,
+  search?: string,
+  ) {
+    const where: any = { workspaceId };
+
+    if (search && search.trim() !== '') {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { subject: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [total, items] = await Promise.all([
+      this.prisma.campaign.count({ where }),
+      this.prisma.campaign.findMany({
+        where,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    return {
+      data: items.map((c) => this.mapCampaign(c)),
+      meta: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize),
+      },
+    };
+  }
+
+  private mapCampaign(c: Campaign): CampaignDto {
+    return {
+      id: c.id,
+      name: c.name,
+      subject: c.subject,
+      content: c.content,
+      workspaceId: c.workspaceId,
+      status: c.status,
+      schedule: c.schedule,
+      scheduleType: c.scheduleType,
+      recurrenceType: c.recurrenceType,
+      hour: c.hour,
+      minute: c.minute,
+      byDay: c.byDay,
+      byMonthDay: c.byMonthDay,
+      createdAt: c.createdAt,
+      updatedAt: c.updatedAt,
+      type: c.type,
+    };
+  }
+
+  async findOne(id: string, workspaceId: string): Promise<CampaignDetailDto | null> {
+    const c = await this.prisma.campaign.findFirst({
+      where: { id, workspaceId },
+      include: {
+        subscribers: {
+          include: {
+            subscriber: {
+              include: {
+                tags: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!c) return null;
+
+    return {
+      ...this.mapCampaign(c),
+      subscribers: c.subscribers.map(s => ({
+        id: s.id,
+        name: s?.subscriber?.name,
+        email: s?.subscriber?.email,
+        timezone: s?.subscriber?.timezone,
+        tags: s?.subscriber.tags.map(t => t.name),
+      })),
+    };
+  }
+
   async createCampaign(dto: CreateCampaignDto) {
     const {
       name,
       content,
-      subscribers,
+      subscribers = [],
       scheduleType,
       recurrenceType,
       sendAtLocal,
@@ -29,7 +117,7 @@ export class CampaignsService {
       workspaceId,
     } = dto;
 
-    // 1) Create campaign record
+    // 1️⃣ Create campaign record
     const campaign = await this.prisma.campaign.create({
       data: {
         name,
@@ -39,18 +127,45 @@ export class CampaignsService {
         byDay,
         byMonthDay,
         workspaceId,
-        schedule: new Date(sendAtLocal),
+        schedule: sendAtLocal ? new Date(sendAtLocal) : null,
       },
     });
 
-    // 2) Group subscribers by timezone
+    // 2️⃣ Create subscribers and campaign-subscriber relation
+    for (const s of subscribers) {
+      // Check if subscriber with same email exists in workspace
+      let subscriber = await this.prisma.subscriber.findUnique({
+        where: { workspaceId_email: { workspaceId, email: s.email } },
+      });
+
+      if (!subscriber) {
+        // Create new subscriber
+        subscriber = await this.prisma.subscriber.create({
+          data: {
+            email: s.email,
+            timezone: s.timezone,
+            workspaceId,
+          },
+        });
+      }
+
+      // Create CampaignSubscriber
+      await this.prisma.campaignSubscriber.create({
+        data: {
+          campaignId: campaign.id,
+          subscriberId: subscriber.id,
+        },
+      });
+    }
+
+    // Group subscribers by timezone
     const tzMap: Record<string, SubscriberInput[]> = {};
     for (const s of subscribers) {
       if (!tzMap[s.timezone]) tzMap[s.timezone] = [];
       tzMap[s.timezone].push(s);
     }
 
-    // 3) Schedule jobs per timezone
+    // Schedule jobs per timezone
     const queueName = 'campaign-send'; // 1 queue chung
     for (const [tz, subs] of Object.entries(tzMap)) {
       const emails = subs.map(s => s.email);

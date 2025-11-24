@@ -103,7 +103,7 @@ model Subscriber {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  campaignAudiences CampaignAudience[]
+  campaignSubcribers CampaignSubscriber[]
   @@unique([workspaceId, email])
 }
 
@@ -126,7 +126,7 @@ model Campaign {
   workspaceId  String
   workspace    Workspace @relation(fields: [workspaceId], references: [id])
 
-  audience     CampaignAudience[]
+  subscribers  CampaignSubscriber[]
   status       CampaignStatus @default(DRAFT)
   schedule     DateTime?
   type         CampaignType  @default(NEWSLETTER)
@@ -135,12 +135,23 @@ model Campaign {
   updatedAt    DateTime @updatedAt
 
   // Scheduling fields
-  scheduleType   ScheduleType?       // ONE_TIME, RECURRING
-  recurrenceType RecurrenceType?     // DAILY, WEEKLY, MONTHLY, YEARLY
-  hour           Int?                // 0–23
-  minute         Int?                // 0–59
-  byDay          String[] @default([])   // e.g ["MO", "WE"] for weekly
-  byMonthDay     Int[] @default([])      // day of month 1–31
+  scheduleType   ScheduleType?
+  recurrenceType RecurrenceType?
+  hour           Int?
+  minute         Int?
+  byDay          String[] @default([])
+  byMonthDay     Int[] @default([])
+}
+
+model CampaignSubscriber {
+  id            String     @id @default(cuid())
+  campaignId    String
+  subscriberId  String
+
+  campaign      Campaign   @relation(fields: [campaignId], references: [id])
+  subscriber    Subscriber @relation(fields: [subscriberId], references: [id])
+
+  @@unique([campaignId, subscriberId])
 }
 
 enum ScheduleType {
@@ -162,17 +173,6 @@ model EmailSendLog {
   sentAt       DateTime
 
   @@unique([campaignId, subscriberId]) // idempotent
-}
-
-model CampaignAudience {
-  id            String     @id @default(cuid())
-  campaignId    String
-  subscriberId  String
-
-  campaign      Campaign   @relation(fields: [campaignId], references: [id])
-  subscriber    Subscriber @relation(fields: [subscriberId], references: [id])
-
-  @@unique([campaignId, subscriberId])
 }
 
 enum CampaignStatus {

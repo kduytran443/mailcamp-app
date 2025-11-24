@@ -1,15 +1,5 @@
 import { IsEmail, IsOptional, IsArray, IsString } from 'class-validator';
+import { CreateSubscriberDto } from './create-subscriber.dto';
 
-export class UpdateSubscriberDto {
-  @IsOptional()
-  @IsEmail()
-  email?: string;
-
-  @IsOptional()
-  @IsString()
-  name?: string;
-
-  @IsOptional()
-  @IsArray()
-  tags?: string[];
+export class UpdateSubscriberDto extends CreateSubscriberDto {
 }

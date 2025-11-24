@@ -8,7 +8,7 @@ interface CampaignJobPayload {
   timezone: string;
   emails: string[];
   id: string;
-  jobKey?: string; // nếu bạn muốn gắn key
+  jobKey?: string;
 }
 @Injectable()
 export class PgbossService implements OnModuleInit, OnModuleDestroy {
@@ -39,27 +39,9 @@ export class PgbossService implements OnModuleInit, OnModuleDestroy {
 
     const id = await this.boss.send(queue, { arg1: 'read me' })
 
-    console.log(`created job ${id} in queue ${queue}`)
-
     await this.boss.work(queue, async ([ job ]) => {
       console.log(`received job ${job.id} with data ${JSON.stringify(job.data)}`)
     })
-    
-    // await this.boss.work<CampaignJobPayload>(
-    //   'campaign-send',
-    //   async (jobs: PgBoss.Job<CampaignJobPayload>[]) => {
-    //     console.log("Nhận message")
-    //     for (const job of jobs) {
-    //       console.log('Job id:', job.id);
-    //       console.log('Job name:', job.name);
-    //       console.log('Emails:', job.data.emails);
-    //       console.log('Timezone:', job.data.timezone);
-    //       console.log('JobKey:', job.data.jobKey);
-
-    //       // TODO: xử lý gửi mail
-    //     }
-    //   }
-    // );
   }
 
   async onModuleDestroy(): Promise<void> {
